@@ -20,6 +20,10 @@ RESULTS_ROOT = PROJECT_ROOT / "results"
 LOGS_ROOT = PROJECT_ROOT / "logs"
 AFL_IMAGE = os.environ.get("NEUROFUZZ_AFL_IMAGE", "aflplusplus/aflplusplus:v4.21c")
 CONTAINER_WORK = "/work"  # куда монтируется папка проекта внутри контейнера
+# ASAN из clang 16 случайно падает при старте на ядре WSL2 6.x (vm.mmap_rnd_bits=32).
+# Лечится отключением ASLR: setarch -R (наследуется дочерними процессами). Docker по умолчанию
+# запрещает personality(), поэтому контейнеры запускаются с seccomp=unconfined.
+NO_ASLR = "setarch x86_64 -R"
 
 # Известные таргеты: путь к бинарнику (внутри контейнера), папка сидов, как подавать вход.
 TARGETS = {
@@ -139,7 +143,7 @@ def docker_volume_arg() -> str:
 
 def docker_run_cmd(inner: str, name: str | None = None, interactive: bool = False) -> list[str]:
     """Команда `docker run` с примонтированным проектом; inner выполняется через bash -c."""
-    cmd = ["docker", "run", "--rm", "-v", docker_volume_arg()]
+    cmd = ["docker", "run", "--rm", "--security-opt", "seccomp=unconfined", "-v", docker_volume_arg()]
     if interactive:
         cmd.append("-i")
     if name:

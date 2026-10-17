@@ -12,7 +12,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .common import TARGETS, RunContext, build_targets, docker_run_cmd, run_logged
+from .common import NO_ASLR, TARGETS, RunContext, build_targets, docker_run_cmd, run_logged
 
 def afl_inner_command(target: str, seconds: int, out_rel: str) -> str:
     """bash-команда для контейнера: фаззинг в /tmp (быстрая ФС), затем прогон очереди через
@@ -22,11 +22,11 @@ def afl_inner_command(target: str, seconds: int, out_rel: str) -> str:
     return (
         "export AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_NO_UI=1 "
         "AFL_NO_AFFINITY=1; "
-        f"afl-fuzz -i /work/{t['seeds']} -o /tmp/afl_out -V {seconds} -- {t['binary']} {args}; "
+        f"{NO_ASLR} afl-fuzz -i /work/{t['seeds']} -o /tmp/afl_out -V {seconds} -- {t['binary']} {args}; "
         "rc=$?; "
         f"mkdir -p /work/{out_rel} && "
         f"cp /tmp/afl_out/default/plot_data /tmp/afl_out/default/fuzzer_stats /work/{out_rel}/ && "
-        f"python3 /work/docker/afl_replay.py /tmp/afl_out/default {t['binary']} /work/{out_rel} {args}; "
+        f"{NO_ASLR} python3 /work/docker/afl_replay.py /tmp/afl_out/default {t['binary']} /work/{out_rel} {args}; "
         "exit $rc"
     )
 
