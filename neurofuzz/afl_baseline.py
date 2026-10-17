@@ -21,7 +21,7 @@ def afl_inner_command(target: str, seconds: int, out_rel: str) -> str:
     args = " ".join(t["args"])
     return (
         "export AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 AFL_NO_UI=1 "
-        "AFL_NO_AFFINITY=1; "
+        "AFL_NO_AFFINITY=1 AFL_PRELOAD=/work/build/nocore.so; "  # nocore.so: см. docker/nocore.c
         f"{NO_ASLR} afl-fuzz -i /work/{t['seeds']} -o /tmp/afl_out -V {seconds} -- {t['binary']} {args}; "
         "rc=$?; "
         f"mkdir -p /work/{out_rel} && "
@@ -116,8 +116,8 @@ def main() -> None:
     ctx.save_config({"kind": "afl_baseline", **vars(a)})
     ctx.say(f"старт AFL++: таргет={a.target}, время={a.seconds}с, логи: {ctx.logs}")
     try:
-        if not a.no_build and a.target.startswith("mini"):
-            build_targets(ctx, "mini")
+        if not a.no_build:
+            build_targets(ctx, "mini" if a.target.startswith("mini") else a.target)
         s = run_afl(ctx, a.target, a.seconds)
         ctx.say(f"финиш: рёбер={s['edges_showmap']}, крашей={s['saved_crashes']}, "
                 f"исполнений={s['execs_done']}; CSV: {ctx.results / 'afl'}")

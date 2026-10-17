@@ -16,8 +16,12 @@ import sys
 timeout_ms, binary, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 ROOT = "/fz" if os.path.isdir("/fz") else "/tmp/fz"   # /fz — tmpfs, монтируется клиентом
 IN, OUT, ONE = ROOT + "/in", ROOT + "/out", ROOT + "/one"
+SUS, SUS_OUT = ROOT + "/sus", ROOT + "/sus_out"
 inp, outp = sys.stdin.buffer, sys.stdout.buffer
 DEVNULL = subprocess.DEVNULL
+# nocore.so отключает core dump таргета (в WSL2 каждый краш иначе вызывает внешний обработчик)
+NOCORE = "/work/build/nocore.so"
+ENV = dict(os.environ, AFL_PRELOAD=NOCORE) if os.path.exists(NOCORE) else dict(os.environ)
 
 
 def read_exact(n):
@@ -53,7 +57,7 @@ def run_single(path):
         os.remove(ONE)
     rc = subprocess.run(["afl-showmap", "-q", "-o", ONE, "-t", timeout_ms, "-m", "none", "--",
                          binary] + [path if a == "@@" else a for a in args],
-                        stdout=DEVNULL, stderr=DEVNULL).returncode
+                        stdout=DEVNULL, stderr=DEVNULL, env=ENV).returncode
     status = rc if rc in (0, 1, 2) else 2
     edges = parse_map(ONE, False) if os.path.exists(ONE) else []
     return status, edges
@@ -71,18 +75,36 @@ def run_batch(datas):
         names.append(name)
     # -Z (режим afl-cmin): для крашей и таймаутов карта НЕ пишется -> по этому их и находим
     subprocess.run(["afl-showmap", "-q", "-Z", "-i", IN, "-o", OUT, "-t", timeout_ms, "-m", "none",
-                    "--", binary] + args, stdout=DEVNULL, stderr=DEVNULL)
-    results = []
+                    "--", binary] + args, stdout=DEVNULL, stderr=DEVNULL, env=ENV)
+    maps = {}
+    suspects = []
     for name in names:
         mp = os.path.join(OUT, name)
         edges = parse_map(mp, True) if os.path.exists(mp) else []
         if edges:
-            results.append((0, edges))
+            maps[name] = (0, edges)
         else:
-            # Краш/таймаут: в режиме -Z файл карты не создаётся или остаётся пустым
-            # (нормальный запуск всегда даёт хотя бы одно ребро) -> уточняем одиночным запуском.
-            results.append(run_single(os.path.join(IN, name)))
-    return results
+            # Краш/таймаут: в режиме -Z карта не создаётся или пуста (нормальный запуск всегда
+            # даёт хотя бы одно ребро).
+            suspects.append(name)
+    if suspects:
+        # Второй проход одним вызовом: AFL_CMIN_CRASHES_ONLY=1 пишет карты ТОЛЬКО для крашей.
+        # Так много одинаковых крашей не стоят по одиночному запуску afl-showmap каждый.
+        for d in (SUS, SUS_OUT):
+            shutil.rmtree(d, ignore_errors=True)
+            os.makedirs(d)
+        for name in suspects:
+            os.rename(os.path.join(IN, name), os.path.join(SUS, name))
+        subprocess.run(["afl-showmap", "-q", "-Z", "-i", SUS, "-o", SUS_OUT, "-t", timeout_ms, "-m", "none",
+                        "--", binary] + args, stdout=DEVNULL, stderr=DEVNULL,
+                       env=dict(ENV, AFL_CMIN_CRASHES_ONLY="1"))
+        for name in suspects:
+            mp = os.path.join(SUS_OUT, name)
+            if os.path.exists(mp):
+                maps[name] = (2, parse_map(mp, True))
+            else:  # не краш -> скорее всего таймаут; уточняем одиночным запуском (редко)
+                maps[name] = run_single(os.path.join(SUS, name))
+    return [maps[n] for n in names]
 
 
 def main():

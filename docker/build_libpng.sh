@@ -9,6 +9,8 @@ B=/tmp/libpng_build                         # собираем на быстро
 OUT=/work/build/libpng
 COMMIT=a37d4836519517bdce6cb9d956092321eca3e73b
 
+mkdir -p /work/build
+gcc -shared -fPIC -O2 -o /work/build/nocore.so /work/docker/nocore.c   # см. docker/nocore.c
 if [ -x "$OUT/libpng_read_fuzzer" ] && [ "${FORCE:-0}" != 1 ]; then
   echo "libpng already built: $OUT/libpng_read_fuzzer"; exit 0
 fi
@@ -22,7 +24,8 @@ git -C "$SRC" archive "$COMMIT" | tar -x -C "$B"
 for patch in "$MAGMA"/targets/libpng/patches/setup/*.patch "$MAGMA"/targets/libpng/patches/bugs/*.patch; do
   name=$(basename "$patch" .patch)
   # в образе нет утилиты patch — используем git apply
-  sed -e "s/$//" -e "s/%MAGMA_BUG%/$name/g" "$patch" | (cd "$B" && git apply -p1 --unidiff-zero --whitespace=nowarn -)
+  # tr убирает CRLF, если Magma клонирована на Windows с autocrlf
+  tr -d '\r' < "$patch" | sed "s/%MAGMA_BUG%/$name/g" | (cd "$B" && git apply -p1 --unidiff-zero --whitespace=nowarn -)
   echo "applied $name"
 done
 

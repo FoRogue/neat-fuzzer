@@ -130,8 +130,7 @@ def main() -> None:
     ctx.save_config({"kind": "executor_selftest", **vars(a)})
     ctx.say(f"старт самопроверки исполнителя: {a.target}, n={a.n}")
     try:
-        if a.target.startswith("mini"):
-            build_targets(ctx, "mini")
+        build_targets(ctx, "mini" if a.target.startswith("mini") else a.target)
         with Executor(a.target, log=ctx.log) as ex:
             if a.target == "mini_maze":
                 known = {b"NEATD0/": STATUS_CRASH, b"NEATWFUZZING": STATUS_CRASH,

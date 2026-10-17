@@ -48,6 +48,7 @@ class CoverageTracker:
     corpus: list[CorpusEntry] = field(default_factory=list)
     execs: int = 0
     timeouts: int = 0
+    crash_execs: int = 0                                  # всего падающих исполнений (с повторами)
 
     def __post_init__(self):
         self.out = self.ctx.results / self.prefix
@@ -71,6 +72,7 @@ class CoverageTracker:
         new_p = [(e, c) for e, c in res.edges.items() if (e, c) not in self.pairs]
         ob.new_edges, ob.new_pairs = len(new_e), len(new_p)
         if res.crashed:
+            self.crash_execs += 1
             # Уникальность краша как в AFL: путь краша содержит ребро, не встречавшееся в прошлых крашах
             if not self.crashes or any(e not in self.crash_edges for e in res.edges):
                 ob.new_crash = True
@@ -112,5 +114,5 @@ class CoverageTracker:
             for c in self.crashes:
                 w.writerow([c["time_s"], c["crash_index"], c["file"]])
         return {"edges": len(self.edges), "unique_crashes": len(self.crashes), "execs": self.execs,
-                "corpus": len(self.corpus), "timeouts": self.timeouts,
+                "corpus": len(self.corpus), "timeouts": self.timeouts, "crash_execs": self.crash_execs,
                 "seconds": round(self.elapsed(), 1)}

@@ -23,7 +23,8 @@ queue = os.path.join(out_dir, "queue")
 maps = "/tmp/replay_maps"
 os.makedirs(maps, exist_ok=True)
 subprocess.run(["afl-showmap", "-q", "-i", queue, "-o", maps, "-t", "1000", "-m", "none", "--",
-                binary] + args, check=False, env=dict(os.environ, AFL_CMIN_ALLOW_ANY="1"))
+                binary] + args, check=False, env=dict(os.environ, AFL_CMIN_ALLOW_ANY="1",
+                                                         AFL_PRELOAD="/work/build/nocore.so"))
 entries = sorted((t_of(n), n) for n in os.listdir(queue) if os.path.isfile(os.path.join(queue, n)))
 seen = set()
 os.makedirs(dest, exist_ok=True)

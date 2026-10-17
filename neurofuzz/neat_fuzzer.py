@@ -126,7 +126,7 @@ class NeatFuzzer:
         tr = self.tracker
         nets = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         base_edges, base_pairs = set(tr.edges), set(tr.pairs)
-        n_crash0 = len(tr.crashes)
+        n_crash0, crash_execs0 = len(tr.crashes), tr.crash_execs
         stats = [{"edges": set(), "pairs": set(), "crashes": 0, "paths": set(), "inputs": set(), "execs": 0}
                  for _ in genomes]
         op_counter = [0] * N_OPS
@@ -156,9 +156,11 @@ class NeatFuzzer:
                          w["new_crash"] * st["crashes"] + w["distinct_path"] * len(st["paths"]) +
                          w["distinct_input"] * len(st["inputs"]))
         self._record_generation(genomes, stats, steps_done, op_counter, time.time() - t_gen,
-                                len(tr.edges) - len(base_edges), len(tr.crashes) - n_crash0)
+                                len(tr.edges) - len(base_edges), len(tr.crashes) - n_crash0,
+                                tr.crash_execs - crash_execs0)
 
-    def _record_generation(self, genomes, stats, steps_done, op_counter, gen_s, new_edges, new_crashes):
+    def _record_generation(self, genomes, stats, steps_done, op_counter, gen_s, new_edges, new_crashes,
+                           crash_execs):
         from .viz import complexity
 
         fits = [g.fitness for _, g in genomes]
@@ -174,7 +176,7 @@ class NeatFuzzer:
                "unique_crashes": len(self.tracker.crashes), "execs": self.tracker.execs,
                "corpus": len(self.tracker.corpus), "species": len(self.pop.species.species),
                "pop_size": len(genomes), "steps": steps_done, "gen_seconds": round(gen_s, 3),
-               "new_edges_gen": new_edges, "new_crashes_gen": new_crashes,
+               "new_edges_gen": new_edges, "new_crashes_gen": new_crashes, "crash_execs_gen": crash_execs,
                "best_genome_id": best.key, "best_new_edges": len(stats[best_i]["edges"]),
                "best_crashes": stats[best_i]["crashes"], "best_hidden": cx["hidden"],
                "best_nodes": cx["nodes"], "best_connections": cx["connections"],
@@ -300,8 +302,8 @@ def main() -> None:
                      "neat_config_text": a.config.read_text(encoding="utf-8")})
     ctx.say(f"старт нейрофаззера: таргет={a.target}, время={a.seconds:g}с, логи: {ctx.logs}")
     try:
-        if not a.no_build and a.target.startswith("mini"):
-            build_targets(ctx, "mini")
+        if not a.no_build:
+            build_targets(ctx, "mini" if a.target.startswith("mini") else a.target)
         s = run_neat(ctx, a.target, a.seconds, config_path=a.config, steps=a.steps,
                      checkpoint_every=a.checkpoint_every, seed=a.seed)
         plot_run(ctx.results)
